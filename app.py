@@ -1,6 +1,5 @@
 import streamlit as st 
 import pandas as pd
-import numpy as np
 import pickle
 import base64
 
@@ -18,7 +17,7 @@ with tab1:
     Age = st.number_input("Age", min_value=0, max_value=120 )
     Sex = st.selectbox("Sex", ["Male", "Female"])
     ChestPainType = st.selectbox("Chest Pain Type", ["Typical Angina", "Atypical Angina", "Non-Angina Pain", "Asymptomatic"])
-    RestingBP = st.number_input("REsting Blood Pressure (mm/Hg)", min_value=0)
+    RestingBP = st.number_input("Resting Blood Pressure (mm/Hg)", min_value=0)
     Cholesterol = st.number_input("Serum Cholesterol (mm/dl)", min_value=0)
     FastingBS = st.selectbox("Fasting Blood Sugar", ["<= 120 mg/dl", "> 120 mg/dl"])
     RestingECG = st.selectbox("Resting ECG Results", ["Normal", "ST-T Wave Abnormality", "Left Ventricular Hypertrophy"])
@@ -84,7 +83,6 @@ with tab2:
             2. Total 11 features in this order ('Age', 'Sex', 'ChestPainType', 
             'RestingBP', 'Cholesterol', 'FastingBS', 'RestingECG', 'MaxHR', 'ExerciseAngina', 'Oldpeak', 'ST_Slope')\n
             3. Check the spelling of the features names.\n
-
             4. Feature values conventions:\n
                 -Age: age of the patient (years)\n
                 -Sex: sex of the patient [0: Male, 1: Female]\n
@@ -92,52 +90,92 @@ with tab2:
                 -RestingBP: resting blood pressure (mm/Hg)\n
                 -Cholesterol: serum cholesterol (mm/dl)\n
                 -FastingBS: fasting blood sugar [0:if blood sugar <= 120 mg/dl, 1:if blood sugar > 120 mg/dl]\n
-                -RestingECG: resting electrocardiographic results [0: Normal, 1: ST-T Wave Abnormality, 2: Left Ventricular Hypertrophy]
+                -RestingECG: resting electrocardiographic results [0: Normal, 1: ST-T Wave Abnormality, 2: Left Ventricular Hypertrophy]\n
                 -MaxHR: maximum heart rate achieved [Numeric value between 60 and 202]\n
                 -ExerciseAngina: exercise-induced angina [0: No, 1: Yes]\n
                 -Oldpeak: oldpeak (ST depression)\n
                 -ST_Slope: slope of the peak exercise ST segment [0: Upsloping, 1: Flat, 2: Downsloping]
-            
-            
-            
         """)
+    
     # Create a file uploader in the sidebar
     uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
     if uploaded_file is not None:
-# Read the iploaded CSV file= into a DataFrame
+        # Read the uploaded CSV file into a DataFrame
         input_data = pd.read_csv(uploaded_file)
-        model = pickle.load(open("LogisticRegression.pkl","rb"))
+        
+        try:
+            model = pickle.load(open("LogisticRegression.pkl", "rb"))
 
-        # Ensure that the input Dataframe matches the expected columns and format
-        expected_columns =['Age', 'Sex', 'ChestPainType', 'RestingBP', 'Cholesterol', 'FastingBS', 
-                           'RestingECG', 'MaxHR', 'ExerciseAngina', 'Oldpeak', 'ST_Slope']
+            # Ensure that the input DataFrame matches the expected columns
+            expected_columns = ['Age', 'Sex', 'ChestPainType', 'RestingBP', 'Cholesterol', 'FastingBS', 
+                                'RestingECG', 'MaxHR', 'ExerciseAngina', 'Oldpeak', 'ST_Slope']
 
-        if set(expected_columns).issubset(input_data.columns):
-            input_data['Prediction LR'] = ''
+            if set(expected_columns).issubset(input_data.columns):
+                
+                # Step 1: Isolate only the required 11 columns to pass to the model
+                features_for_prediction = input_data[expected_columns]
 
-            for i in range(len(input_data)):
-                arr = input_data.iloc[i,:-1].values
-                input_data['Prediction LR'][i] = model.predict([arr])[0]
-            input_data.to_csv('PredictedHeartLR.csv')
+                # Step 2: Predict all rows at once! (No for loop)
+                # This automatically creates a new column with the correct integer data type
+                input_data['Prediction LR'] = model.predict(features_for_prediction)
 
-            # Display the predictions
-            st.subheader("Predictions:")
-            st.write(input_data)
+                # Step 3: Save and display results
+                input_data.to_csv('PredictedHeartLR.csv', index=False)
 
-            # Create a button to download the updated CSV file
-            st.markdown(get_binary_file_downloader_html(input_data), unsafe_allow_html=True)
-        else:
-            st.warning("Please make sure the uploaded file has the correct columns.")
+                st.subheader("Predictions:")
+                st.write(input_data)
+
+                # Create a button to download the updated CSV file
+                st.markdown(get_binary_file_downloader_html(input_data), unsafe_allow_html=True)
+                
+            else:
+                st.warning("Please make sure the uploaded file has the correct columns.")
+                
+        except Exception as e:
+            st.error(f"⚠️ Error: {e}. Please make sure 'LogisticRegression.pkl' is in your folder.")
 
     else:
         st.info("Upload a CSV file to get predictions.")
 
 with tab3:
     import plotly.express as px
-    data = {'Decision Trees': 80.97, 'Logistic Regression': 85.86, 'Random Forest': 84.23, 'Support Vector Machine':84.22}
-    Models = list(data.keys())
-    Accuracies = list(data.values())
-    df = pd.DataFrame (list(zip(Models,Accuracies)),columns=['Models','Accuracies'])
-    fig = px.bar(df, y='Accuracies',x='Models')
-    st.plotly_chart(fig)
+    st.title("Model Information")
+    st.subheader("📊 Model Accuracy Comparison")
+    
+    # A much cleaner way to create the DataFrame directly
+    data = {
+        'Models': ['Decision Trees', 'Logistic Regression', 'Random Forest', 'Support Vector Machine'],
+        'Accuracies': [80.97, 85.86, 84.23, 84.22]
+    }
+    df = pd.DataFrame(data)
+    
+    # Create the base chart with colors and text labels
+    fig = px.bar(
+        df, 
+        x='Models', 
+        y='Accuracies',
+        color='Models', # Assigns a unique color to each bar
+        text='Accuracies', # Tells Plotly to put the numbers on the bars
+        color_discrete_sequence=px.colors.qualitative.Pastel # Uses a beautiful, modern color palette
+    )
+
+    # Fine-tune the aesthetics
+    fig.update_traces(
+        texttemplate='%{text:.2f}%', # Formats the labels as percentages (e.g., 85.86%)
+        textposition='outside',      # Places the text neatly above the bars
+        marker_line_color='black',   # Adds a subtle border to the bars
+        marker_line_width=1,
+        width=0.5                    # Makes the bars a bit thinner and more elegant
+    )
+    
+    fig.update_layout(
+        xaxis_title="",                  # Removes the redundant "Models" label on the X-axis
+        yaxis_title="Accuracy (%)",      # Cleans up the Y-axis label
+        yaxis=dict(range=[75, 90]),      # Zooms the Y-axis to highlight the differences!
+        showlegend=False,                # Hides the legend (since the X-axis already has the names)
+        plot_bgcolor='rgba(0,0,0,0)'     # Gives the chart a clean, transparent background
+    )
+    
+    # use_container_width=True forces the chart to beautifully fill the screen space
+    st.plotly_chart(fig, use_container_width=True)
